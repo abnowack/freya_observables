@@ -1,8 +1,5 @@
 """
 TODO:
-[ ] Extract terminated neutrons, record position, velocity vectors and time
-[ ] Do same for photons
-[ ] Create method for storing neutron and photon lists for each event
 """
 
 import numpy as np
@@ -39,9 +36,6 @@ def parse_ptrac_to_hdf5(ptrac_filename):
                 f_neutron_d = f_history_g.create_dataset('neutrons', (len(neutrons),), dtype=dt)
                 f_photon_d = f_history_g.create_dataset('photons', (len(photons),), dtype=dt)
                 
-                if len(photons) > 0:
-                    print i
-                
                 for j, neutron in enumerate(neutrons):
                     f_neutron_d[j, 'x'] = neutron.xxx
                     f_neutron_d[j, 'y'] = neutron.yyy
@@ -61,9 +55,30 @@ def parse_ptrac_to_hdf5(ptrac_filename):
                     f_photon_d[j, 'w'] = photon.www
                     f_photon_d[j, 'energy'] = photon.erg
                     f_photon_d[j, 'time'] = photon.tme
-  
-with open('input_cards/geometry.i', 'r') as cardfile:
-    card = cardfile.read()
+                    
+if __name__ == '__main__':
+    
+#    with open('input_cards/geometry.i', 'r') as cardfile:
+#        card = cardfile.read()
+#
+#    with run_mcnp(card, cores=4) as (status, mcnp_dir):
+#        parse_ptrac_to_hdf5(mcnp_dir + '\\ptrac')
+    
+    # calculate nu
+    print 'processing'
+    with h5.File('ptrac.h5', 'r') as f:
+        n_nu = np.zeros(35)
+        p_nu = np.zeros(35)
+        for name, event in f['events'].iteritems():
+            n_n = event['neutrons'].size
+            n_p = event['photons'].size
+            n_nu[n_n] += 1
+            p_nu[n_p] += 1
 
-with run_mcnp(card, cores=4) as (status, mcnp_dir):
-    parse_ptrac_to_hdf5(mcnp_dir + '\\ptrac')
+    plt.bar(np.arange(len(n_nu)), n_nu, color='r', alpha=0.5)
+    plt.bar(np.arange(len(p_nu)), p_nu, color='b', alpha=0.5)
+    plt.yscale('log')
+    plt.show()
+    
+    print np.average(np.arange(len(n_nu)), weights=n_nu)
+    print np.average(np.arange(len(p_nu)), weights=p_nu)
