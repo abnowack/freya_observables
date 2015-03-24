@@ -1,10 +1,10 @@
 """
 TODO:
 Might consider not saving in event folder, but with event field sequentially
-[ ] Finalize HDF5 Format
+[x] Finalize HDF5 Format
 [ ] Automated ways to plot
-    [ ] Avg Neutrons
-    [ ] Avg Photons
+    [x] Avg Neutrons
+    [x] Avg Photons
     [ ] Time Histogram of Neutrons
     [ ] Time Histogram of Photons
     [ ] Angle between neutrons
@@ -17,8 +17,16 @@ import matplotlib.pyplot as plt
 from mcnpy.mcnp_wrapper import *
 from mcnpy.ptrac import reader as preader
 import h5py as h5
+from matplotlib import rc
 
-def parse_ptrac_to_hdf5(ptrac_filename, ev_buffer_len=1000, h_buffer_len=1000):
+rc('font', **{'family': 'serif', 'serif': ['Computer Modern']})
+rc('text', usetex=True)
+rc('figure', fc='white', dpi=150)
+rc('lines', lw=2, color='black')
+rc('axes', color_cycle=['black'])
+
+def parse_ptrac_to_hdf5(ptrac_filename, hdf5_filename='ptrac.h5', 
+                        ev_buffer_len=1000, h_buffer_len=1000):
     ''' save neutron and photon position, directory, energy, time '''
     with open(ptrac_filename, 'r') as ptrac:
         # parse headers and formats
@@ -26,7 +34,7 @@ def parse_ptrac_to_hdf5(ptrac_filename, ev_buffer_len=1000, h_buffer_len=1000):
         input_format = preader.ptrac_input_format(ptrac)
         event_format = preader.ptrac_event_format(ptrac)
 
-        with h5.File('ptrac_.h5', 'w') as f:
+        with h5.File(hdf5_filename, 'w') as f:
             dt = np.dtype([('evt', np.int), ('ipt', np.int), ('x', np.float),
                            ('y', np.float), ('z', np.float), ('u', np.float),
                            ('v', np.float), ('w', np.float),
@@ -76,20 +84,70 @@ if __name__ == '__main__':
 
     # calculate nu
     print 'processing'
-    with h5.File('ptrac_.h5', 'r') as f:
+    with h5.File('ptrac.h5', 'r') as f:
         hist = f['history']
         evts = f['events']
-        history_index = evts[:-1, 'evt'] != evts[1:, 'evt']
-        split_evts = np.array(np.split(evts, np.where(history_index)[0]))
-        neutrons = split_evts * split_evts[:, 'ipt' == 1]
-        photons = split_evts * split_evts[:, 'ipt' == 2]
-        n_nu, n_bins = np.histogram((np.size(n) for n in neutrons), bins=50, range=[0,50])
-        p_nu, p_bins = np.histogram((np.size(n) for n in neutrons), bins=50, range=[0,50])
+        
+        # avg neutron, photon
+        n_n = np.zeros(np.size(hist))
+        n_p = np.zeros(np.size(hist))
+        
+        t_n, t_p = [], []
+        
+        dt_n, dt_p = [], []
 
-    plt.bar(n_bins, n_nu, color='r', alpha=0.5)
-    plt.bar(p_bins, p_nu, color='b', alpha=0.5)
+        for i, h in enumerate(hist):
+            evt = evts[h]
+            neutrons = evt[evt['ipt'] == 1]
+            photons = evt[evt['ipt'] == 2]
+            
+            n_n[i] = neutrons.size
+            n_p[i] = photons.size
+            
+            t_n.extend(neutrons['time'])
+            t_p.extend(photons['time'])
+            
+            if n_n[i] > 1:
+                for n1 in neutrons:
+                    for n2 in neutrons[1:]:
+                        dt_n.append(n1['time'] - n2['time'])
+            
+            if n_p[i] > 1:
+                for p1 in photons:
+                    for p2 in photons[1:]:
+                        dt_p.append(p1['time'] - p2['time'])
+
+    fig = plt.figure()
+    plt.hist(n_n, bins=30, range=[0, 30], label='Neutron', histtype='step', linestyle='dashed')
+    plt.hist(n_p, bins=30, range=[0, 30], label='Photon', histtype='step', linestyle='solid')
     plt.yscale('log')
+    plt.xlabel('Frequency')
+    plt.ylabel('Count')
+    plt.title('# Escaped Per Event')
+    plt.legend([plt.Line2D([0], [0], color='black', linestyle='dashed'),
+                plt.Line2D([0], [0], color='black', linestyle='solid')], 
+               [r'Neutron $\nu$ = ' + '{0:.2f}'.format(np.average(n_n)), 
+                r'Photon  $\nu$ = ' + '{0:.2f}'.format(np.average(n_p))], frameon=False)
     plt.show()
-
-    print np.average(np.arange(len(n_nu)), weights=n_nu)
-    print np.average(np.arange(len(p_nu)), weights=p_nu)
+    
+    fig = plt.figure()
+    plt.hist(t_n, bins=50, range=[0, 50], histtype='step', label='Neutron', linestyle='dashed')
+    plt.hist(t_p, bins=50, range=[0, 50], histtype='step', label='Photon', linestyle='solid')
+    plt.legend([plt.Line2D([0], [0], color='black', linestyle='dashed'),
+                plt.Line2D([0], [0], color='black', linestyle='solid')], 
+               [r'Neutron', r'Photon'], frameon=False) 
+    plt.xlabel('Time Since Fission (ns)')
+    plt.ylabel('Count')
+    plt.title('Detection Time Distribution')
+    plt.show()
+    
+    fig = plt.figure()
+    plt.hist(dt_n, bins=100, range=[-50, 50], histtype='step', label='Neutron', linestyle='dashed')
+    plt.hist(dt_p, bins=100, range=[-50, 50], histtype='step', label='Photon', linestyle='solid')
+    plt.legend([plt.Line2D([0], [0], color='black', linestyle='dashed'),
+                plt.Line2D([0], [0], color='black', linestyle='solid')], 
+               [r'Neutron', r'Photon'], frameon=False) 
+    plt.xlabel('Time Between Events (ns)')
+    plt.ylabel('Count')
+    plt.title('Timing Correlation')
+    plt.show()
