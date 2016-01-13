@@ -25,6 +25,7 @@ rc('figure', fc='white', dpi=150)
 rc('lines', lw=2, color='black')
 rc('axes', color_cycle=['black'])
 
+
 def parse_ptrac_to_hdf5(ptrac_filename, hdf5_filename='ptrac.h5', 
                         ev_buffer_len=1000, h_buffer_len=1000):
     ''' save neutron and photon position, directory, energy, time '''
